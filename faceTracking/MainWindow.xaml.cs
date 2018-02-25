@@ -51,7 +51,7 @@ namespace faceTracking
             // RGBカメラの情報取得時に実行
             kinect.ColorFrameReady += new EventHandler<ColorImageFrameReadyEventArgs>(kinect_ColorFrameReady);
             // すべての情報の更新について実行されるイベント
-            // kinect.AllFramesReady += new EventHandler<AllFramesReadyEventArgs>(kinect_ColorFrameReady);
+            // kinect.AllFramesReady += new EventHandler<AllFramesReadyEventArgs>(kinect_AllFramesReady);
 
             // 動作開始
             kinect.Start();
