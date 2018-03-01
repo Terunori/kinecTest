@@ -5,8 +5,9 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:faceTracking"
         mc:Ignorable="d"
-        Title="MainWindow" Height="480" Width="640">
+        Title="MainWindow" Height="521" Width="663">
     <Grid>
-        <Image Name="rgbCamera" Stretch="Uniform" />
+        <Image HorizontalAlignment="Left" Name="imageRgbCamera" Stretch="Fill" VerticalAlignment="Top" />
+        <Canvas HorizontalAlignment="Left" Name="canvasSkeleton" VerticalAlignment="Top" />
     </Grid>
 </Window>
