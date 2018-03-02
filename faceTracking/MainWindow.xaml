@@ -9,5 +9,10 @@
     <Grid>
         <Image HorizontalAlignment="Left" Name="imageRgbCamera" Stretch="Fill" VerticalAlignment="Top" />
         <Canvas HorizontalAlignment="Left" Name="canvasSkeleton" VerticalAlignment="Top" />
+        <TextBlock Height="30" HorizontalAlignment="Center" Margin="6,571,6,0" Name="statusTextBlock" Text="TextBlock" VerticalAlignment="Top" Width="444" />
+        <TextBlock Height="30" HorizontalAlignment="Center" Margin="6,571,6,0" Name="sendTextBlock" Text="TextBlock" VerticalAlignment="Top" Width="444" />
+        <Button Height="30" HorizontalAlignment="Center" Margin="6,571,6,0" Name="IPPortUpdate" Content="Update IP and port" VerticalAlignment="Top" Width="100" Click="IPPortUpdate_Click" />
+        <TextBox Height="30" HorizontalAlignment="Center" Margin="6,571,6,0" Name="iPUpdate" Text="192.168.0.1" VerticalAlignment="Top" Width="444" />
+        <TextBox Height="30" HorizontalAlignment="Center" Margin="6,571,6,0" Name="portUpdate" Text="1234" VerticalAlignment="Top" Width="444" />
     </Grid>
 </Window>

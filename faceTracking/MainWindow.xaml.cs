@@ -95,7 +95,7 @@ namespace faceTracking
         /// <summary>
         /// Face rotation display angle increment in degrees
         /// </summary>
-        const double FaceRotationIncrementInDegrees = 0.1;
+        // const double FaceRotationIncrementInDegrees = 0.1;
 
         public MainWindow()
         {
@@ -122,7 +122,7 @@ namespace faceTracking
                 // kinect.ColorStream.Enable(ColorImageFormat.InfraredResolution640x480Fps30);
 
                 // すべての情報の更新について実行されるイベント
-                kinect.AllFramesReady += new EventHandler<AllFramesReadyEventArgs>(kinect_AllFramesReady);
+                kinect.AllFramesReady += new EventHandler<AllFramesReadyEventArgs>(Kinect_AllFramesReady);
 
                 // 動作開始
                 kinect.Start();
@@ -137,9 +137,11 @@ namespace faceTracking
             }
         }
 
+        /*
         /// <summary>
         /// Converts rotation quaternion to Euler angles
         /// And then maps them to a specified range of values to control the refresh rate
+        /// v1(v1.5-v1.8)ではQuaternion使えない？？
         /// </summary>
         /// <param name="rotQuaternion">face rotation quaternion</param>
         /// <param name="pitch">rotation about the X-axis</param>
@@ -166,6 +168,7 @@ namespace faceTracking
             yaw = (double)(Math.Floor((yawD + ((increment / 2.0) * (yawD > 0 ? 1.0 : -1.0))) / increment) * increment);
             roll = (double)(Math.Floor((rollD + ((increment / 2.0) * (rollD > 0 ? 1.0 : -1.0))) / increment) * increment);
         }
+        */
 
         /// <summary>
         /// Frames更新で実行されるイベント(eの中に更新されたデータを格納)
@@ -173,7 +176,7 @@ namespace faceTracking
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        void kinect_AllFramesReady(object sender, AllFramesReadyEventArgs e)
+        void Kinect_AllFramesReady(object sender, AllFramesReadyEventArgs e)
         {
             using (ColorImageFrame colorFrame = e.OpenColorImageFrame())
             using (DepthImageFrame depthFrame = e.OpenDepthImageFrame())
@@ -203,6 +206,69 @@ namespace faceTracking
                     }
                 }
             }
+        }
+        
+        /// <summary>
+        /// 初期化処理
+        /// WPFを開いた直後に実行
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            // ソケットの生成
+            from = new IPEndPoint(IPAddress.Loopback, portFrom);
+            toExp = new IPEndPoint(IPAddress.Loopback, portTo);
+            // from = new IPEndPoint(IPAddress.Parse("192.168.11.24"), portFrom);
+
+            // 送信先のアドレスとポート番号の表示
+            sendTextBlock.Text = "Target: " + toExp.Address.ToString() + ':' + toExp.Port.ToString();
+            // SendLisnerTextBlock.Text = "送信先(受聴者): " + toLisner.Address.ToString() + ':' + toLisner.Port.ToString();
+            
+            // IPPortUpdateボタンが押されたら更新
+            IPPortUpdate.Click += new RoutedEventHandler(this.IPPortUpdate_Click);
+        }
+
+        /// <summary>
+        /// IPPortUpdateボタンが押された
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void IPPortUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            IPAddress IPnew = IPAddress.Parse(iPUpdate.Text);
+            int Portnew = Int32.Parse(portUpdate.Text);
+
+            toExp = new IPEndPoint(IPnew, Portnew);
+            sendTextBlock.Text = "Target: " + toExp.Address.ToString() + ':' + toExp.Port.ToString();
+        }
+
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if ( faceTracker != null)
+            {
+                faceTracker.Dispose();
+                faceTracker = null;
+            }
+
+            if (kinect != null)
+            {
+                kinect.Stop();
+                kinect = null;
+            }
+
+        }
+
+        /// <summary>
+        /// 終了処理
+        /// いるのかなこれ？？
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void Window_Closed(object sender, EventArgs e)
+        {
+            //kinectChooser.Stop();
         }
 
         /// <summary>
@@ -270,18 +336,69 @@ namespace faceTracking
             });
         }
 
-
         /// <summary>
-        /// 顔を認識し位置と回転のパラメータを取得
+        /// 顔を認識し回転のパラメータを取得
         /// </summary>
         /// <param name="colorFrame"></param>
         /// <param name="depthFrame"></param>
         /// <param name="skeletonFrame"></param>
         private void FaceDataAcquisition(ColorImageFrame colorFrame, DepthImageFrame depthFrame, Skeleton skeleton)
         {
-            var faceFrame = faceTracker.Track(colorFrame.Format, colorFrame.ToPixelData(),
+            FaceTrackFrame faceFrame = faceTracker.Track(colorFrame.Format, colorFrame.ToPixelData(),
                 depthFrame.Format, depthFrame.ToPixelData(), skeleton);
+            if (faceFrame.TrackSuccessful)
+            {
+                rotHeadXYZ.x = faceFrame.Rotation.X;
+                rotHeadXYZ.y = faceFrame.Rotation.Y;
+                rotHeadXYZ.z = faceFrame.Rotation.Z;
+
+                // トラッキング状態を表示
+                statusTextBlock.Text = "Status: Tracked";
+
+                // 送信
+                SendOSCMessage(rotHeadXYZ, posHeadXYZ, posHandRightXYZ, posHandLeftXYZ);
+            } else
+            {
+                // トラッキング状態を表示
+                statusTextBlock.Text = "Status: NOT Tracked";
+            }
         }
 
+        /// <summary>
+        /// 回転角や位置情報をOSCにより送信
+        /// </summary>
+        /// <param name="rotHeadXYZ"></param>
+        /// <param name="posHeadXYZ"></param>
+        /// <param name="posHandRightXYZ"></param>
+        /// <param name="posHandLeftXYZ"></param>
+        private void SendOSCMessage(Vector3DF rotHeadXYZ, Vector3DF posHeadXYZ, Vector3DF posHandRightXYZ, Vector3DF posHandLeftXYZ)
+        {
+            // OSCメッセージ生成
+            OscMessage rotHeadOsc = new OscMessage(from, "/head_rot", null);
+            OscMessage posHeadOsc = new OscMessage(from, "/head_pos", null);
+            OscMessage posHandRightOsc = new OscMessage(from, "/hand_r", null);
+            OscMessage posHandLeftOsc = new OscMessage(from, "/hand_l", null);
+
+            // 情報の追加
+            rotHeadOsc.Append<float>(rotHeadXYZ.x);
+            rotHeadOsc.Append<float>(rotHeadXYZ.y);
+            rotHeadOsc.Append<float>(rotHeadXYZ.z);
+            posHeadOsc.Append<float>(posHeadXYZ.x);
+            posHeadOsc.Append<float>(posHeadXYZ.y);
+            posHeadOsc.Append<float>(posHeadXYZ.z);
+            posHandRightOsc.Append<float>(posHandRightXYZ.x);
+            posHandRightOsc.Append<float>(posHandRightXYZ.y);
+            posHandRightOsc.Append<float>(posHandRightXYZ.z);
+            posHandLeftOsc.Append<float>(posHandLeftXYZ.x);
+            posHandLeftOsc.Append<float>(posHandLeftXYZ.y);
+            posHandLeftOsc.Append<float>(posHandLeftXYZ.z);
+
+            // 送信
+            rotHeadOsc.Send(toExp);
+            posHeadOsc.Send(toExp);
+            posHandRightOsc.Send(toExp);
+            posHandLeftOsc.Send(toExp);
+        }
+        
     }
 }
