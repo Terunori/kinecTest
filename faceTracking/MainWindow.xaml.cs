@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using System.Diagnostics;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -10,6 +13,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Media.Media3D;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 
@@ -67,6 +71,32 @@ namespace faceTracking
         KinectSensor kinect;
         FaceTracker faceTracker;
 
+        // 3次元ベクトル
+        public struct Vector3DF
+        {
+            public float x, y, z;
+        }
+
+        // 回転角や位置を格納する
+        private Vector3DF rotHeadXYZ = new Vector3DF();
+        private Vector3DF posHeadXYZ = new Vector3DF();
+        private Vector3DF posHandRightXYZ = new Vector3DF();
+        private Vector3DF posHandLeftXYZ = new Vector3DF();
+
+        // 送信元・送信先のネットワークエンドポイント
+        private IPEndPoint from = null;
+        private IPEndPoint toExp = null;
+        // private IPEndpoint toListener = null;
+
+        // 送信元・送信先のポート
+        private int portFrom = 7777;
+        private int portTo = 1234;
+
+        /// <summary>
+        /// Face rotation display angle increment in degrees
+        /// </summary>
+        const double FaceRotationIncrementInDegrees = 0.1;
+
         public MainWindow()
         {
             // 色々よしなにしてくれるおまじない.
@@ -108,6 +138,36 @@ namespace faceTracking
         }
 
         /// <summary>
+        /// Converts rotation quaternion to Euler angles
+        /// And then maps them to a specified range of values to control the refresh rate
+        /// </summary>
+        /// <param name="rotQuaternion">face rotation quaternion</param>
+        /// <param name="pitch">rotation about the X-axis</param>
+        /// <param name="yaw">rotation about the Y-axis</param>
+        /// <param name="roll">rotation about the Z-axis</param>
+        private static void ExtractFaceRotationInDegrees(double qx, double qy, double qz, double qw, out double pitch, out double yaw, out double roll)
+        {
+            double x = qx;
+            double y = qy;
+            double z = qz;
+            double w = qw;
+
+            double pitchD, yawD, rollD;
+
+            // convert face rotation quaternion to Euler angles in degrees
+
+            pitchD = Math.Atan2(2 * ((y * z) + (w * x)), (w * w) - (x * x) - (y * y) + (z * z)) / Math.PI * 180.0;
+            yawD = Math.Asin(2 * ((w * y) - (x * z))) / Math.PI * 180.0;
+            rollD = Math.Atan2(2 * ((x * y) + (w * z)), (w * w) + (x * x) - (y * y) - (z * z)) / Math.PI * 180.0;
+
+            // clamp the values to a multiple of the specified increment to control the refresh rate
+            double increment = FaceRotationIncrementInDegrees;
+            pitch = (double)(Math.Floor((pitchD + ((increment / 2.0) * (pitchD > 0 ? 1.0 : -1.0))) / increment) * increment);
+            yaw = (double)(Math.Floor((yawD + ((increment / 2.0) * (yawD > 0 ? 1.0 : -1.0))) / increment) * increment);
+            roll = (double)(Math.Floor((rollD + ((increment / 2.0) * (rollD > 0 ? 1.0 : -1.0))) / increment) * increment);
+        }
+
+        /// <summary>
         /// Frames更新で実行されるイベント(eの中に更新されたデータを格納)
         /// kinectのメインループ
         /// </summary>
@@ -146,33 +206,68 @@ namespace faceTracking
         }
 
         /// <summary>
-        /// 骨格表示
+        /// 頭、両手の位置情報取得
+        /// 関節表示
         /// </summary>
         /// <param name="skeletonFrame"></param>
         private void ShowSkeleton(Skeleton skeleton)
         {
             // clear canvas
             canvasSkeleton.Children.Clear();
-            
+
             // draw skeleton
             foreach ( Joint joint in skeleton.Joints)
             {
+                JointType jointType = joint.JointType;
                 //tracked skeleton
                 if ( joint.TrackingState != JointTrackingState.NotTracked )
                 {
-                    // 骨格座標をカラー座標に変換
-                    ColorImagePoint point = kinect.CoordinateMapper.MapSkeletonPointToColorPoint(joint.Position, kinect.ColorStream.Format);
-
-                    // draw circles
-                    canvasSkeleton.Children.Add(new Ellipse() {
-                        Margin = new Thickness( point.X, point.Y, 0, 0 ),
-                        Fill = new SolidColorBrush( Colors.Black ),
-                        Width = 20,
-                        Height = 20,
-                    });
+                    switch (jointType)
+                    {
+                        case JointType.Head:
+                            posHeadXYZ.x = joint.Position.X;
+                            posHeadXYZ.y = joint.Position.Y;
+                            posHeadXYZ.z = joint.Position.Z;
+                            DrawJoint(joint, Colors.Yellow);
+                            break;
+                        case JointType.HandRight:
+                            posHandRightXYZ.x = joint.Position.X;
+                            posHandRightXYZ.y = joint.Position.Y;
+                            posHandRightXYZ.z = joint.Position.Z;
+                            DrawJoint(joint, Colors.Yellow);
+                            break;
+                        case JointType.HandLeft:
+                            posHandLeftXYZ.x = joint.Position.X;
+                            posHandLeftXYZ.y = joint.Position.Y;
+                            posHandLeftXYZ.z = joint.Position.Z;
+                            DrawJoint(joint, Colors.Yellow);
+                            break;
+                        default:
+                            DrawJoint(joint, Colors.Gray);
+                            break;
+                    }
                 }
             }
 
+        }
+
+        /// <summary>
+        /// canvasSkeleton上に関節を与えられた色の円で表示
+        /// </summary>
+        /// <param name="joint"></param>
+        /// <param name="gray"></param>
+        private void DrawJoint(Joint joint, Color color)
+        {
+            // 骨格座標をカラー座標に変換
+            ColorImagePoint point = kinect.CoordinateMapper.MapSkeletonPointToColorPoint(joint.Position, kinect.ColorStream.Format);
+            // draw circles
+            canvasSkeleton.Children.Add(new Ellipse()
+            {
+                Margin = new Thickness(point.X, point.Y, 0, 0),
+                Fill = new SolidColorBrush(color),
+                Width = 20,
+                Height = 20,
+            });
         }
 
 
