@@ -354,13 +354,18 @@ namespace faceTracking
 
                 // トラッキング状態を表示
                 statusTextBlock.Text = "Status: Tracked";
+                statusTextBlock.Background = new SolidColorBrush(Color.FromRgb(0xBB, 0xDE, 0xFB));
 
                 // 送信
-                SendOSCMessage(rotHeadXYZ, posHeadXYZ, posHandRightXYZ, posHandLeftXYZ);
+                if (sendTextBlock.Text != "push 'Update IP and Port'")
+                {
+                    SendOSCMessage(rotHeadXYZ, posHeadXYZ, posHandRightXYZ, posHandLeftXYZ);
+                }
             } else
             {
                 // トラッキング状態を表示
                 statusTextBlock.Text = "Status: NOT Tracked";
+                statusTextBlock.Background = (SolidColorBrush)this.FindResource("MyBrush");
             }
         }
 
